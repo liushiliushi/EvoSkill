@@ -232,6 +232,44 @@ class TestToolGeneratorResponse:
 
 
 # ===========================================================================
+# SkillTreeOperationResponse
+# ===========================================================================
+
+class TestSkillTreeOperationResponse:
+    def test_valid_construction(self):
+        from src.schemas import SkillTreeOperationResponse
+        from src.skill_tree import SkillNode, SkillTree
+
+        tree = SkillTree(
+            name="table-answering",
+            root=SkillNode(
+                type="condition",
+                rule="task involves a table",
+                children=[SkillNode(type="action", instruction="Check units.")],
+            ),
+        )
+        resp = SkillTreeOperationResponse(
+            tree=tree,
+            reasoning="Clean tree.",
+            operator="maintain",
+        )
+        assert resp.tree.name == "table-answering"
+        assert resp.operator == "maintain"
+
+    def test_missing_tree_raises(self):
+        from src.schemas import SkillTreeOperationResponse
+
+        with pytest.raises(ValidationError):
+            SkillTreeOperationResponse(reasoning="reason", operator="m1")  # type: ignore[call-arg]
+
+    def test_json_schema_contains_tree(self):
+        from src.schemas import SkillTreeOperationResponse
+
+        schema = SkillTreeOperationResponse.model_json_schema()
+        assert "tree" in schema["properties"]
+
+
+# ===========================================================================
 # PromptGeneratorResponse
 # ===========================================================================
 

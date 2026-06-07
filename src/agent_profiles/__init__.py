@@ -16,6 +16,7 @@ from .livecodebench_agent import (
 from .prompt_generator import prompt_generator_options
 from .skill_proposer import skill_proposer_options
 from .prompt_proposer import prompt_proposer_options
+from .skill_tree_operator import skill_tree_operator_options
 
 __all__ = [
     "proposer_options",
@@ -31,4 +32,5 @@ __all__ = [
     "prompt_generator_options",
     "skill_proposer_options",
     "prompt_proposer_options",
+    "skill_tree_operator_options",
 ]

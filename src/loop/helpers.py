@@ -26,7 +26,7 @@ def build_proposer_query(
     Args:
         traces_with_answers: List of (trace, agent_answer, ground_truth, category) tuples.
         feedback_history: Previous feedback history.
-        evolution_mode: "skill_only" or "prompt_only" - affects trace truncation.
+        evolution_mode: "skill_only", "prompt_only", or "skill_tree" - affects trace truncation.
         truncation_level: Context reduction level (0=full, 1=moderate, 2=aggressive).
         task_constraints: Optional task-specific constraints to include in the query.
 

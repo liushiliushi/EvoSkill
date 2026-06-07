@@ -59,6 +59,21 @@ from src.schemas import (
     PromptGeneratorResponse,
     SkillProposerResponse,
     PromptProposerResponse,
+    SkillTreeOperationResponse,
+)
+from src.skill_tree import (
+    load_project_skill_trees,
+    maintain_tree,
+    normalize_skill_tree_name,
+    prune_branches,
+    save_and_render_skill_tree,
+    tree_from_proposal,
+)
+from src.skill_tree.llm_ops import (
+    e2_crossover_with_llm,
+    m1_reflection_update_with_llm,
+    m2_random_semantic_mutation_with_llm,
+    maintain_with_llm,
 )
 
 from .config import LoopConfig
@@ -88,6 +103,7 @@ class LoopAgents:
     prompt_proposer: Agent[PromptProposerResponse]
     skill_generator: Agent[ToolGeneratorResponse]
     prompt_generator: Agent[PromptGeneratorResponse]
+    skill_tree_operator: Agent[SkillTreeOperationResponse] | None = None
 
 
 @dataclass
@@ -346,7 +362,8 @@ class SelfImprovingLoop:
 
                 # Evaluate child
                 _log("", f"  -> Evaluating {child_name}...")
-                child_score = await self._evaluate(self.val_data)  # accumulates to self._iter_cost
+                raw_child_score = await self._evaluate(self.val_data)  # accumulates to self._iter_cost
+                child_score = self._score_child(raw_child_score)
 
                 # Update frontier or discard
                 added = self.manager.update_frontier(
@@ -471,6 +488,31 @@ class SelfImprovingLoop:
             )
         return score / len(results)
 
+    def _score_child(self, raw_score: float) -> float:
+        """Return the frontier score for a child program."""
+        if self.config.evolution_mode != "skill_tree":
+            return raw_score
+
+        trees = load_project_skill_trees(self._project_root)
+        if not trees:
+            return raw_score
+
+        # Penalize the full structured skill context used by this program.
+        total_nodes = sum(tree.count_nodes() for tree in trees)
+        max_depth = max(tree.max_depth() for tree in trees)
+        node_penalty = self.config.skill_tree_node_penalty_weight * total_nodes
+        depth_penalty = self.config.skill_tree_depth_penalty_weight * max(
+            0,
+            max_depth - self.config.skill_tree_free_depth,
+        )
+        score = raw_score - node_penalty - depth_penalty
+        _log(
+            "",
+            "  -> Skill-tree fitness: "
+            f"{score:.4f} (raw={raw_score:.4f}, nodes={total_nodes}, depth={max_depth})",
+        )
+        return score
+
     async def _mutate(
         self,
         parent: str,
@@ -497,6 +539,9 @@ class SelfImprovingLoop:
         _log("", f"  -> Running {evolution_mode.replace('_only', '')} proposer with {len(failures)} failures...")
         feedback_history = read_feedback_history(self._feedback_path)
         proposer_query = build_proposer_query(failures, feedback_history, evolution_mode, truncation_level, self.task_constraints, project_root=self._project_root)
+
+        if evolution_mode == "skill_tree":
+            return await self._mutate_skill_tree(parent, failures, actual_iteration, proposer_query)
 
         if evolution_mode == "skill_only":
             proposer_trace = await self.agents.skill_proposer.run(proposer_query)
@@ -601,6 +646,129 @@ and modify it to add these capabilities. Preserve all existing content that is s
 
         # Return mutation info (feedback will be written by caller with outcome)
         return (child_name, proposed, justification)
+
+    async def _mutate_skill_tree(
+        self,
+        parent: str,
+        failures: list[tuple[AgentTrace[AgentResponse], str, str, str]],
+        actual_iteration: int,
+        proposer_query: str,
+    ) -> tuple[str, str, str] | None:
+        """Create or edit a structured skill tree mutation."""
+        proposer_trace = await self.agents.skill_proposer.run(proposer_query)
+        self._iter_cost += proposer_trace.total_cost_usd
+
+        if proposer_trace.output is None:
+            _log("", f"  [WARN] Skill-tree proposer failed: {proposer_trace.parse_error}")
+            return None
+
+        proposer_output = proposer_trace.output
+        proposed = proposer_output.proposed_skill
+        justification = proposer_output.justification
+        action_type = proposer_output.action
+        target_skill = proposer_output.target_skill
+
+        _log("", f"  -> Proposal: skill_tree ({action_type}) - {proposed[:50]}...")
+        self._emit("proposal", action=f"skill_tree:{action_type}", target_skill=target_skill, summary=proposed[:80])
+
+        child_name = f"iter-tree-{actual_iteration}"
+        self.manager.switch_to(parent)
+        parent_config = self.manager.get_current()
+        child_config = parent_config.mutate(child_name)
+        self.manager.create_program(child_name, child_config, parent=parent)
+
+        tree_name = normalize_skill_tree_name(target_skill or child_name)
+        existing_trees = load_project_skill_trees(self._project_root)
+        failures_text = self._summarize_failures_for_tree(failures)
+        operator_agent = self.agents.skill_tree_operator
+
+        target_tree = next((tree for tree in existing_trees if tree.name == target_skill), None)
+        proposal_tree = tree_from_proposal(
+            name=tree_name,
+            proposal=proposed,
+            justification=justification,
+        )
+
+        if operator_agent and action_type == "edit" and target_tree is not None:
+            _log("", f"  -> Running m1 reflection update on {target_tree.name}...")
+            mutation = await m1_reflection_update_with_llm(
+                operator_agent,
+                target_tree,
+                failures=failures_text,
+                child_name=target_tree.name,
+            )
+            self._iter_cost += mutation.cost_usd
+            candidate_tree = mutation.tree
+        elif operator_agent and existing_trees:
+            _log("", f"  -> Running e2 LLM crossover...")
+            mutation = await e2_crossover_with_llm(
+                operator_agent,
+                existing_trees[0],
+                proposal_tree,
+                failures=failures_text,
+                child_name=tree_name,
+            )
+            self._iter_cost += mutation.cost_usd
+            candidate_tree = mutation.tree
+        elif operator_agent:
+            _log("", f"  -> Running m2 semantic mutation...")
+            mutation = await m2_random_semantic_mutation_with_llm(
+                operator_agent,
+                proposal_tree,
+                focus=failures_text,
+                child_name=tree_name,
+            )
+            self._iter_cost += mutation.cost_usd
+            candidate_tree = mutation.tree
+        else:
+            candidate_tree = proposal_tree
+
+        # Low-cost m3 prune, then tree maintenance.
+        candidate_tree = prune_branches(
+            candidate_tree,
+            min_hits=1,
+            min_contribution=0.0,
+            child_name=candidate_tree.name,
+        )
+
+        if operator_agent:
+            _log("", f"  -> Maintaining skill tree...")
+            mutation = await maintain_with_llm(
+                operator_agent,
+                candidate_tree,
+                max_depth=self.config.skill_tree_free_depth,
+                max_nodes=40,
+                child_name=candidate_tree.name,
+            )
+            self._iter_cost += mutation.cost_usd
+            candidate_tree = mutation.tree
+        else:
+            candidate_tree = maintain_tree(
+                candidate_tree,
+                max_depth=self.config.skill_tree_free_depth,
+                max_nodes=40,
+                child_name=candidate_tree.name,
+            )
+
+        save_and_render_skill_tree(self._project_root, candidate_tree)
+        self._emit("skill_written", name=candidate_tree.name, action="skill_tree", target=target_skill)
+
+        self.manager.commit(f"{child_name}: skill-tree {proposed[:40]}")
+        return (child_name, proposed, justification)
+
+    def _summarize_failures_for_tree(
+        self,
+        failures: list[tuple[AgentTrace[AgentResponse], str, str, str]],
+    ) -> str:
+        sections: list[str] = []
+        for index, (trace, agent_answer, ground_truth, category) in enumerate(failures, 1):
+            sections.append(
+                f"### Failure {index} [Category: {category}]\n"
+                f"{trace.summarize(head_chars=5000, tail_chars=2000)}\n\n"
+                f"Agent Answer: {agent_answer}\n"
+                f"Ground Truth: {ground_truth}\n"
+            )
+        return "\n".join(sections)
 
     async def _mutate_with_fallback(
         self,

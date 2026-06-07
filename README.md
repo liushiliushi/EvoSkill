@@ -428,7 +428,7 @@ model = "sonnet"       # Claude alias, Codex model name, or provider/model for O
 data_dirs = ["/absolute/path/to/data_dir"]  # extra directories the agent can read
 
 [evolution]
-mode = "skill_only"          # "skill_only" or "prompt_only"
+mode = "skill_only"          # "skill_only", "prompt_only", or "skill_tree"
 iterations = 20
 frontier_size = 3
 concurrency = 4
@@ -461,6 +461,15 @@ evoskill run --config .evoskill/config.openrouter.toml
 ```
 
 **Common evolution model setups:**
+
+Structured skill-tree evolution:
+
+```toml
+[evolution]
+mode = "skill_tree"
+```
+
+This stores structured YAML skill trees under `.evoskill/skill_trees/`, renders them into `.claude/skills/<name>/SKILL.md`, and scores candidates with validation accuracy minus a small tree-complexity penalty.
 
 Anthropic:
 
@@ -647,7 +656,7 @@ from src.api import EvoSkill
 evo = EvoSkill(
     task="sealqa",
     model="sonnet",
-    mode="skill_only",
+    mode="skill_only",  # also supports "prompt_only" and "skill_tree"
     max_iterations=20,
     frontier_size=3,
     concurrency=4,

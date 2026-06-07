@@ -234,7 +234,7 @@ def test_init_write_config_uses_harness_default_model(tmp_path: Path) -> None:
     assert raw["dataset"]["category_column"] == "difficulty"
     assert "# Agent runtime used to execute EvoSkill runs." in rendered
     assert "# Additional folders the agent can interact with during runs." in rendered
-    assert "# What EvoSkill is allowed to optimize: skills or the base prompt." in rendered
+    assert "# What EvoSkill is allowed to optimize: skills, skill trees, or the base prompt." in rendered
     assert "# CSV column containing the expected answer." in rendered
     assert "# Scoring rule used to compare predictions against ground truth." in rendered
 

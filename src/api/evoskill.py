@@ -17,6 +17,7 @@ from src.agent_profiles import (
     prompt_proposer_options,
     prompt_generator_options,
 )
+from src.agent_profiles.skill_tree_operator import skill_tree_operator_options
 from src.loop import SelfImprovingLoop, LoopConfig, LoopAgents, LoopResult
 from src.registry import ProgramManager
 from src.schemas import (
@@ -25,6 +26,7 @@ from src.schemas import (
     PromptProposerResponse,
     ToolGeneratorResponse,
     PromptGeneratorResponse,
+    SkillTreeOperationResponse,
 )
 
 from .data_utils import load_dataset, stratified_split
@@ -38,7 +40,7 @@ class EvoSkill:
         dataset: Path to the dataset CSV file. If not provided, uses the task's default.
         task: Registered task name (e.g. "base", "dabstep", "sealqa").
         model: Model for the base agent (e.g. "opus", "sonnet", "haiku").
-        mode: Evolution mode — "skill_only" or "prompt_only".
+        mode: Evolution mode — "skill_only", "prompt_only", or "skill_tree".
         max_iterations: Maximum number of improvement iterations.
         frontier_size: Number of top-performing programs to keep.
         no_improvement_limit: Stop after this many iterations without improvement.
@@ -122,6 +124,10 @@ class EvoSkill:
             prompt_proposer=Agent(prompt_proposer_options, PromptProposerResponse),
             skill_generator=Agent(skill_generator_options, ToolGeneratorResponse),
             prompt_generator=Agent(prompt_generator_options, PromptGeneratorResponse),
+            skill_tree_operator=Agent(
+                skill_tree_operator_options,
+                SkillTreeOperationResponse,
+            ),
         )
 
     def _load_data(

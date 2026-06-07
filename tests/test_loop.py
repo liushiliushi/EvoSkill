@@ -74,6 +74,13 @@ class TestLoopConfig:
         assert config.selection_strategy == "random"
         assert config.tolerance == pytest.approx(0.05)
 
+    def test_skill_tree_mode_accepted(self):
+        from src.loop.config import LoopConfig
+
+        config = LoopConfig(evolution_mode="skill_tree")
+        assert config.evolution_mode == "skill_tree"
+        assert config.skill_tree_node_penalty_weight == pytest.approx(0.01)
+
     def test_cache_dir_is_path_instance(self):
         from src.loop.config import LoopConfig
 

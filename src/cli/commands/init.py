@@ -250,7 +250,7 @@ def _render_config(config: dict) -> str:
         '',
         '[evolution]',
     ])
-    _append_toml_field(lines, 'What EvoSkill is allowed to optimize: skills or the base prompt.', 'mode', config['evolution']['mode'])
+    _append_toml_field(lines, 'What EvoSkill is allowed to optimize: skills, skill trees, or the base prompt.', 'mode', config['evolution']['mode'])
     lines.append('')
     _append_toml_field(lines, 'Maximum number of improvement iterations to run.', 'iterations', config['evolution']['iterations'])
     lines.append('')

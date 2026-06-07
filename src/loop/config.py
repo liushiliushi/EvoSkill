@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 
-EvolutionMode = Literal["prompt_only", "skill_only"]
+EvolutionMode = Literal["prompt_only", "skill_only", "skill_tree"]
 SelectionStrategy = Literal["best", "random", "round_robin"]
 
 
@@ -19,7 +19,8 @@ class LoopConfig:
         no_improvement_limit: Stop early after this many iterations without improvement.
         tolerance: Tolerance for answer matching (0.0 = exact match).
         concurrency: Number of concurrent evaluations.
-        evolution_mode: Which dimension to evolve ("prompt_only" or "skill_only").
+        evolution_mode: Which dimension to evolve ("prompt_only", "skill_only",
+            or "skill_tree").
         selection_strategy: Parent selection from frontier — "best" (greedy, default),
             "random" (uniform random), or "round_robin" (cycle through ranked members).
         reset_feedback: Whether to reset feedback_history.md on fresh loop run.
@@ -36,6 +37,11 @@ class LoopConfig:
 
     # Evolution mode: which dimension to optimize
     evolution_mode: EvolutionMode = "skill_only"
+
+    # Skill tree fitness: validation score minus complexity penalties.
+    skill_tree_node_penalty_weight: float = 0.01
+    skill_tree_depth_penalty_weight: float = 0.02
+    skill_tree_free_depth: int = 4
 
     # Parent selection strategy: how to pick the next parent from the frontier
     selection_strategy: SelectionStrategy = "best"

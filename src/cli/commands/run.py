@@ -335,6 +335,9 @@ def run_cmd(continue_loop: bool, verbose: bool, quiet: bool, config_path: Path |
     from src.agent_profiles.skill_proposer.skill_proposer import (
         make_skill_proposer_options,
     )
+    from src.agent_profiles.skill_tree_operator.skill_tree_operator import (
+        make_skill_tree_operator_options,
+    )
     from src.cli.shared import load_and_split, make_scorer
     from src.loop import LoopAgents, LoopConfig, SelfImprovingLoop
     from src.registry import ProgramManager, ProgramManagerError
@@ -343,6 +346,7 @@ def run_cmd(continue_loop: bool, verbose: bool, quiet: bool, config_path: Path |
         PromptGeneratorResponse,
         PromptProposerResponse,
         SkillProposerResponse,
+        SkillTreeOperationResponse,
         ToolGeneratorResponse,
     )
     cfg = load_config(config_path=config_path)
@@ -479,6 +483,15 @@ def run_cmd(continue_loop: bool, verbose: bool, quiet: bool, config_path: Path |
                 model=cfg.harness.model,
             ),
             PromptGeneratorResponse,
+            timeout_seconds=cfg.harness.timeout_seconds,
+            max_retries=cfg.harness.max_retries,
+        ),
+        skill_tree_operator=Agent(
+            make_skill_tree_operator_options(
+                project_root=cfg.project_root,
+                model=cfg.harness.model,
+            ),
+            SkillTreeOperationResponse,
             timeout_seconds=cfg.harness.timeout_seconds,
             max_retries=cfg.harness.max_retries,
         ),

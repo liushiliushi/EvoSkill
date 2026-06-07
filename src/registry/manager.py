@@ -448,6 +448,9 @@ class ProgramManager:
 
         # Stage only program-related files (not loop state in .evoskill/)
         self._git_add(".claude/")
+        skill_trees_dir = self.cwd / ".evoskill" / "skill_trees"
+        if skill_trees_dir.exists():
+            self._git_add(".evoskill/skill_trees/")
 
         # Get program name for default message
         try:
